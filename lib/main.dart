@@ -1,0 +1,108 @@
+// ============================================================
+// EduAcademy - تطبيق أكاديمي وإدارة دورات تعليمية
+// الدروس، الملاحظات، الاختبارات، الشهادات، إحصائيات المعلم
+//
+// إعداد الطالب: معتصم يحيى الحجوري
+// ============================================================
+
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/license_screen.dart';
+import 'services/auth_service.dart';
+import 'services/license_service.dart';
+import 'services/storage_service.dart';
+import 'theme.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await StorageService.instance.init();
+  runApp(const CarCareApp());
+}
+
+class CarCareApp extends StatelessWidget {
+  const CarCareApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'EduAcademy',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(),
+      // اللغة العربية و RTL
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: (context, child) =>
+          Directionality(textDirection: TextDirection.rtl, child: child!),
+      home: const _Gate(),
+    );
+  }
+}
+
+/// بوابة التحقق من الترخيص قبل فتح التطبيق
+class _Gate extends StatefulWidget {
+  const _Gate();
+  @override
+  State<_Gate> createState() => _GateState();
+}
+
+class _GateState extends State<_Gate> {
+  LicenseState? _state;
+  bool _loggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final st = await LicenseService.check();
+    final logged = await AuthService.isLoggedIn();
+    if (mounted) {
+      setState(() {
+        _state = st;
+        _loggedIn = logged;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_state == null) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.school, size: 72, color: AppColors.primary),
+              SizedBox(height: 16),
+              Text(
+                'EduAcademy',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 24),
+              CircularProgressIndicator(color: AppColors.primary),
+            ],
+          ),
+        ),
+      );
+    }
+    if (!_state!.allowed) {
+      return LicenseScreen(
+        message: _state!.message,
+        onActivated: () => setState(() => _state = LicenseState(allowed: true)),
+      );
+    }
+    if (!_loggedIn) {
+      return LoginScreen(onLoggedIn: () => setState(() => _loggedIn = true));
+    }
+    return HomeScreen(onLogout: () => setState(() => _loggedIn = false));
+  }
+}
