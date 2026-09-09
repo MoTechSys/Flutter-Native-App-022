@@ -171,7 +171,7 @@ class EmptyState extends StatelessWidget {
 /// رسالة SnackBar (نجاح / خطأ)
 void showSnack(BuildContext context, String msg, {bool error = false}) {
   ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
+    ..removeCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: Row(

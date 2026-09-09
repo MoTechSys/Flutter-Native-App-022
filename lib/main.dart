@@ -96,7 +96,7 @@ class _GateState extends State<_Gate> {
     }
     if (!_state!.allowed) {
       return LicenseScreen(
-        message: _state!.message,
+        state: _state!,
         onActivated: () => setState(() => _state = LicenseState(allowed: true)),
       );
     }

@@ -21,6 +21,7 @@ import 'package:eduacademy/screens/questions_screen.dart';
 import 'package:eduacademy/screens/quiz_screen.dart';
 import 'package:eduacademy/screens/stats_screen.dart';
 import 'package:eduacademy/screens/students_screen.dart';
+import 'package:eduacademy/services/license_service.dart';
 import 'package:eduacademy/services/storage_service.dart';
 import 'package:eduacademy/theme.dart';
 
@@ -159,7 +160,10 @@ void main() {
     'license',
     (t) => check(
       t,
-      LicenseScreen(message: 'رسالة', onActivated: () {}),
+      LicenseScreen(
+        state: LicenseState(allowed: false, message: 'رسالة'),
+        onActivated: () {},
+      ),
       scroll: false,
     ),
   );
