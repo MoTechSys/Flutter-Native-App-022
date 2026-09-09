@@ -22,6 +22,7 @@ class LessonScreen extends StatelessWidget {
       builder: (context, _) {
         final l =
             s.lessons.where((x) => x.id == lesson.id).firstOrNull ?? lesson;
+        final completed = s.isCompleted(l.id);
         return Scaffold(
           appBar: AppBar(title: const Text('الدرس'), backgroundColor: color),
           body: SafeArea(
@@ -103,19 +104,17 @@ class LessonScreen extends StatelessWidget {
                     ),
                     const SizedBox(width: 14),
                     Icon(
-                      l.completed
+                      completed
                           ? Icons.check_circle
                           : Icons.radio_button_unchecked,
                       size: 16,
-                      color: l.completed ? AppColors.green : AppColors.textDim,
+                      color: completed ? AppColors.green : AppColors.textDim,
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      l.completed ? 'مكتمل' : 'غير مكتمل',
+                      completed ? 'مكتمل' : 'غير مكتمل',
                       style: TextStyle(
-                        color: l.completed
-                            ? AppColors.green
-                            : AppColors.textDim,
+                        color: completed ? AppColors.green : AppColors.textDim,
                       ),
                     ),
                   ],
@@ -146,44 +145,61 @@ class LessonScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: l.completed
-                              ? AppColors.textDim
-                              : AppColors.green,
-                        ),
-                        onPressed: () async {
-                          await s.toggleLesson(l);
-                          if (context.mounted) {
-                            showSnack(
-                              context,
-                              l.completed
-                                  ? 'تم تحديد الدرس كمكتمل ✓'
-                                  : 'تم إلغاء الإكمال',
-                            );
-                          }
-                        },
-                        icon: Icon(l.completed ? Icons.undo : Icons.check),
-                        label: Text(
-                          l.completed ? 'إلغاء الإكمال' : 'إكمال الدرس',
-                        ),
+                // المعلم يراجع المحتوى فقط؛ الطالب يُكمل ويسجّل ملاحظات
+                if (s.isTeacher)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.people_outline),
+                      title: const Text('أكمل هذا الدرس'),
+                      trailing: Text(
+                        '${s.students.where((u) => s.isCompleted(l.id, u.email)).length} / ${s.students.length} طالب',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: color),
-                        onPressed: () =>
-                            showNoteForm(context, defaultCourseId: l.courseId),
-                        icon: const Icon(Icons.note_add),
-                        label: const Text('ملاحظة'),
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: completed
+                                ? AppColors.textDim
+                                : AppColors.green,
+                          ),
+                          onPressed: () async {
+                            await s.toggleLesson(l);
+                            if (context.mounted) {
+                              showSnack(
+                                context,
+                                !completed
+                                    ? 'تم تحديد الدرس كمكتمل ✓'
+                                    : 'تم إلغاء الإكمال',
+                              );
+                            }
+                          },
+                          icon: Icon(completed ? Icons.undo : Icons.check),
+                          label: Text(
+                            completed ? 'إلغاء الإكمال' : 'إكمال الدرس',
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: color,
+                          ),
+                          onPressed: () => showNoteForm(
+                            context,
+                            defaultCourseId: l.courseId,
+                          ),
+                          icon: const Icon(Icons.note_add),
+                          label: const Text('ملاحظة'),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),

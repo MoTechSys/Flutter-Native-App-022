@@ -1,5 +1,5 @@
 // ============================================================
-// CarCare - شاشة حول التطبيق
+// EduAcademy - شاشة حول التطبيق
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -92,7 +92,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 child: const Padding(
                   padding: EdgeInsets.all(8),
                   child: Text(
-                    'الإصدار 1.0.0',
+                    'الإصدار 1.1.0',
                     style: TextStyle(color: AppColors.textDim),
                   ),
                 ),

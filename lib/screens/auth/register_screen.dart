@@ -1,5 +1,5 @@
 // ============================================================
-// CarCare - صفحة إنشاء حساب (Form + Validation)
+// EduAcademy - صفحة إنشاء حساب (Form + Validation + اختيار الدور)
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -31,6 +31,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _nameCtl.text.trim(),
       _emailCtl.text.trim(),
       _passCtl.text,
+      role: _role,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -38,7 +39,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       showSnack(context, err, error: true);
       return;
     }
-    showSnack(context, 'تم إنشاء الحساب بنجاح، يمكنك تسجيل الدخول');
+    showSnack(
+      context,
+      'تم إنشاء حساب ${_role.label} بنجاح، يمكنك تسجيل الدخول',
+    );
     Navigator.pop(context);
   }
 
@@ -109,6 +113,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
                 // اختيار الدور
+                const Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    'نوع الحساب',
+                    style: TextStyle(color: AppColors.textDim, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 SegmentedButton<UserRole>(
                   segments: const [
                     ButtonSegment(
@@ -124,6 +136,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ],
                   selected: {_role},
                   onSelectionChanged: (s) => setState(() => _role = s.first),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _role == UserRole.teacher
+                      ? 'المعلم: يدير الدورات والدروس والأسئلة ويتابع أداء الطلاب'
+                      : 'الطالب: يشاهد الدروس ويسجّل الملاحظات ويحل الاختبارات',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textDim,
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(

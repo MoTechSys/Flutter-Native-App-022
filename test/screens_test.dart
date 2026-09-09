@@ -17,8 +17,10 @@ import 'package:eduacademy/screens/home_screen.dart';
 import 'package:eduacademy/screens/lesson_screen.dart';
 import 'package:eduacademy/screens/license_screen.dart';
 import 'package:eduacademy/screens/notes_screen.dart';
+import 'package:eduacademy/screens/questions_screen.dart';
 import 'package:eduacademy/screens/quiz_screen.dart';
 import 'package:eduacademy/screens/stats_screen.dart';
+import 'package:eduacademy/screens/students_screen.dart';
 import 'package:eduacademy/services/storage_service.dart';
 import 'package:eduacademy/theme.dart';
 
@@ -49,6 +51,20 @@ void main() {
     databaseFactory = databaseFactoryFfi;
     s.overridePath = inMemoryDatabasePath;
     await s.init();
+    s.setSession('x@y.com', 'معتصم', false);
+    // حسابات: طالب + معلم (الدور يُحفظ فعلاً)
+    expect(await s.register('معتصم', 'x@y.com', '123456'), isNull);
+    expect(
+      await s.register(
+        'المعلم أحمد',
+        't@y.com',
+        '123456',
+        role: UserRole.teacher,
+      ),
+      isNull,
+    );
+    expect(s.students.length, 1);
+    expect(s.userByEmail('t@y.com')!.role, UserRole.teacher);
     // بيانات طويلة عمداً
     await s.addCourse(
       Course(
@@ -79,6 +95,15 @@ void main() {
         date: DateTime.now(),
       ),
     );
+    // الملاحظة تُنسب للمستخدم الحالي فقط
+    expect(s.myNotes.length, 1);
+    expect(s.notesOf('t@y.com'), isEmpty);
+    // التقدّم خاص بكل طالب
+    final firstLesson = s.lessonsOf('c1').first;
+    await s.toggleLesson(firstLesson);
+    expect(s.isCompleted(firstLesson.id, 'x@y.com'), isTrue);
+    expect(s.isCompleted(firstLesson.id, 't@y.com'), isFalse);
+    expect(s.completedCount('x@y.com'), 1);
     await s.addResult(
       QuizResult(
         id: '',
@@ -214,4 +239,53 @@ void main() {
     'stats student',
     (t) => check(t, const StatsScreen(email: 'x@y.com', teacher: false)),
   );
+  testWidgets('students list + details (teacher)', (t) async {
+    await check(t, const StudentsScreen(), scroll: false);
+    expect(find.text('معتصم'), findsWidgets);
+    final u = s.userByEmail('x@y.com')!;
+    await check(t, StudentDetailsScreen(user: u));
+  });
+  testWidgets('questions CRUD screen (teacher)', (t) async {
+    final c = s.courseById('long')!;
+    await check(t, QuestionsScreen(course: c), scroll: false);
+    expect(find.text('سؤال جديد'), findsOneWidget);
+    // CRUD للأسئلة (عمليات قاعدة البيانات داخل runAsync)
+    final q = Question(
+      id: '',
+      courseId: 'long',
+      text:
+          'سؤال تجريبي طويل جداً للتأكد من الالتفاف الصحيح للنص داخل البطاقة؟',
+      options: ['أ', 'ب', 'ج', 'د'],
+      correctIndex: 2,
+    );
+    await t.runAsync(() => s.addQuestion(q));
+    expect(s.questionsOf('long').length, 1);
+    q.text = 'معدّل';
+    await t.runAsync(() => s.updateQuestion(q));
+    expect(s.questionsOf('long').first.text, 'معدّل');
+    await t.pumpAndSettle();
+    expect(find.text('معدّل'), findsOneWidget);
+    await t.runAsync(() => s.deleteQuestion(q.id));
+    expect(s.questionsOf('long'), isEmpty);
+  });
+  testWidgets('teacher home + drawer', (t) async {
+    s.setSession('t@y.com', 'المعلم أحمد', true);
+    SharedPreferences.setMockInitialValues({
+      'session_email': 't@y.com',
+      'session_name': 'المعلم أحمد',
+      'session_role': 1,
+    });
+    await t.pumpWidget(wrap(HomeScreen(onLogout: () {})));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(find.text('الطلاب'), findsWidgets);
+    await t.tap(find.byIcon(Icons.menu));
+    await t.pumpAndSettle();
+    expect(find.text('أداء الطلاب والإحصائيات'), findsOneWidget);
+    expect(find.text('ملاحظاتي'), findsNothing);
+    // معلم يرى إدارة الأسئلة في تفاصيل الدورة
+    await check(t, const CourseDetailsScreen(courseId: 'c1'));
+    expect(find.text('إدارة أسئلة الاختبار'), findsOneWidget);
+    s.setSession('x@y.com', 'معتصم', false);
+  });
 }

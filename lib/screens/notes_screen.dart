@@ -21,11 +21,11 @@ class NotesScreen extends StatelessWidget {
         child: AnimatedBuilder(
           animation: s,
           builder: (context, _) {
-            final list = s.notes;
+            final list = s.myNotes;
             if (list.isEmpty) {
               return const EmptyState(
                 icon: Icons.sticky_note_2,
-                text: 'لا توجد ملاحظات بعد',
+                text: 'لا توجد ملاحظات بعد\nاضغط + لإضافة ملاحظتك الأولى',
               );
             }
             return ListView.builder(
@@ -241,6 +241,7 @@ Future<void> showNoteForm(
                     final n = Note(
                       id: existing?.id ?? '',
                       courseId: courseId,
+                      studentEmail: existing?.studentEmail ?? s.currentEmail,
                       title: titleCtl.text.trim(),
                       body: bodyCtl.text.trim(),
                       date: existing?.date ?? DateTime.now(),

@@ -18,11 +18,11 @@ import 'theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.instance.init();
-  runApp(const CarCareApp());
+  runApp(const EduAcademyApp());
 }
 
-class CarCareApp extends StatelessWidget {
-  const CarCareApp({super.key});
+class EduAcademyApp extends StatelessWidget {
+  const EduAcademyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +64,7 @@ class _GateState extends State<_Gate> {
 
   Future<void> _check() async {
     final st = await LicenseService.check();
-    final logged = await AuthService.isLoggedIn();
+    final logged = await AuthService.restore();
     if (mounted) {
       setState(() {
         _state = st;

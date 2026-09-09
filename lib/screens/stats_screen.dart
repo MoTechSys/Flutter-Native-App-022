@@ -25,6 +25,17 @@ class StatsScreen extends StatelessWidget {
           builder: (context, _) {
             final results = teacher ? s.results : s.resultsOf(email);
             final passed = results.where((r) => r.passed).length;
+            final students = s.students;
+            // تقدّم الدورة: للمعلم = متوسط تقدّم كل الطلاب، للطالب = تقدّمه هو
+            double courseProgress(String courseId) {
+              if (!teacher) return s.progressOf(courseId, email);
+              if (students.isEmpty) return 0;
+              return students
+                      .map((u) => s.progressOf(courseId, u.email))
+                      .reduce((a, b) => a + b) /
+                  students.length;
+            }
+
             final avg = results.isEmpty
                 ? 0.0
                 : results.map((r) => r.percent).reduce((a, b) => a + b) /
@@ -46,12 +57,21 @@ class StatsScreen extends StatelessWidget {
                       value: '${s.courses.length}',
                       label: 'الدورات',
                     ),
-                    StatTile(
-                      icon: Icons.play_lesson,
-                      color: AppColors.teal,
-                      value: '${s.lessons.length}',
-                      label: 'الدروس',
-                    ),
+                    if (teacher)
+                      StatTile(
+                        icon: Icons.people,
+                        color: AppColors.teal,
+                        value: '${students.length}',
+                        label: 'الطلاب',
+                      )
+                    else
+                      StatTile(
+                        icon: Icons.check_circle,
+                        color: AppColors.teal,
+                        value:
+                            '${s.completedCount(email)} / ${s.lessons.length}',
+                        label: 'درس مكتمل',
+                      ),
                     StatTile(
                       icon: Icons.quiz,
                       color: AppColors.orange,
@@ -126,13 +146,18 @@ class StatsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 // تقدم كل دورة
-                const Text(
-                  'تقدّم الدورات',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Text(
+                  teacher
+                      ? 'متوسط تقدّم الطلاب في الدورات'
+                      : 'تقدّمي في الدورات',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 ...s.courses.map((c) {
-                  final p = s.progressOf(c.id);
+                  final p = courseProgress(c.id);
                   final color = Color(c.color);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -218,7 +243,7 @@ class StatsScreen extends StatelessWidget {
                         ),
                         subtitle: Text(
                           teacher
-                              ? '${r.studentEmail}\n${fmtDate(r.date)}'
+                              ? '${s.userByEmail(r.studentEmail)?.name ?? r.studentEmail}\n${fmtDate(r.date)}'
                               : fmtDate(r.date),
                           style: const TextStyle(fontSize: 12),
                         ),

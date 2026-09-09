@@ -9,6 +9,7 @@ import '../services/storage_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'lesson_screen.dart';
+import 'questions_screen.dart';
 import 'quiz_screen.dart';
 
 class CourseDetailsScreen extends StatefulWidget {
@@ -44,6 +45,13 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
         final lessons = s.lessonsOf(course.id);
         final questions = s.questionsOf(course.id);
         final progress = s.progressOf(course.id);
+        final myResults = s
+            .resultsOf(s.currentEmail)
+            .where((r) => r.courseId == course.id)
+            .toList();
+        final best = myResults.isEmpty
+            ? null
+            : myResults.map((r) => r.percent).reduce((a, b) => a > b ? a : b);
         return Scaffold(
           appBar: AppBar(
             title: const Text('تفاصيل الدورة'),
@@ -92,35 +100,37 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: progress,
-                                minHeight: 7,
-                                backgroundColor: Colors.white24,
-                                color: Colors.white,
+                      if (!_teacher) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 7,
+                                  backgroundColor: Colors.white24,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '${(progress * 100).round()}%',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+                            const SizedBox(width: 10),
+                            Text(
+                              '${(progress * 100).round()}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-                // زر الاختبار
+                // الاختبار: الطالب يحلّه، المعلم يدير أسئلته
                 Card(
                   child: ListTile(
                     leading: Container(
@@ -129,15 +139,31 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                         color: AppColors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.quiz, color: AppColors.orange),
+                      child: Icon(
+                        _teacher ? Icons.edit_note : Icons.quiz,
+                        color: AppColors.orange,
+                      ),
                     ),
-                    title: const Text(
-                      'اختبار الدورة',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    title: Text(
+                      _teacher ? 'إدارة أسئلة الاختبار' : 'اختبار الدورة',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: Text('${questions.length} سؤال • النجاح من 60%'),
+                    subtitle: Text(
+                      _teacher
+                          ? '${questions.length} سؤال • إضافة / تعديل / حذف'
+                          : best == null
+                          ? '${questions.length} سؤال • النجاح من 60%'
+                          : '${questions.length} سؤال • أفضل نتيجة ${best.round()}% • ${myResults.length} محاولة',
+                    ),
                     trailing: const Icon(Icons.chevron_left),
-                    onTap: questions.isEmpty
+                    onTap: _teacher
+                        ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => QuestionsScreen(course: course),
+                            ),
+                          )
+                        : questions.isEmpty
                         ? () => showSnack(
                             context,
                             'لا توجد أسئلة لهذه الدورة بعد',
@@ -171,6 +197,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                 ...lessons.asMap().entries.map((e) {
                   final i = e.key;
                   final l = e.value;
+                  final done = !_teacher && s.isCompleted(l.id);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Card(
@@ -183,10 +210,10 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen> {
                           ),
                         ),
                         leading: CircleAvatar(
-                          backgroundColor: l.completed
+                          backgroundColor: done
                               ? AppColors.green
                               : color.withValues(alpha: 0.15),
-                          child: l.completed
+                          child: done
                               ? const Icon(
                                   Icons.check,
                                   color: Colors.white,
@@ -337,7 +364,6 @@ Future<void> showLessonForm(
                     title: titleCtl.text.trim(),
                     durationMin: int.parse(durCtl.text),
                     content: contentCtl.text.trim(),
-                    completed: existing?.completed ?? false,
                   );
                   if (isEdit) {
                     await s.updateLesson(l);

@@ -1,5 +1,5 @@
 // ============================================================
-// CarCare - عناصر واجهة مشتركة
+// EduAcademy - عناصر واجهة مشتركة
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -145,16 +145,24 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 70, color: AppColors.textDim),
-          const SizedBox(height: 12),
-          Text(
-            text,
-            style: const TextStyle(color: AppColors.textDim, fontSize: 16),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 70, color: AppColors.textDim),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textDim,
+                fontSize: 15,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

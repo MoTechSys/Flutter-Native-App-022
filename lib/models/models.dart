@@ -46,14 +46,35 @@ class Course {
   );
 }
 
-/// درس داخل دورة
+/// مستخدم (طالب أو معلم)
+class AppUser {
+  int id;
+  String name;
+  String email;
+  UserRole role;
+
+  AppUser({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+  });
+
+  factory AppUser.fromMap(Map m) => AppUser(
+    id: m['id'] ?? 0,
+    name: m['name'] ?? '',
+    email: m['email'] ?? '',
+    role: (m['role'] ?? 0) == 1 ? UserRole.teacher : UserRole.student,
+  );
+}
+
+/// درس داخل دورة (الإكمال يُحفظ لكل طالب في جدول progress)
 class Lesson {
   String id;
   String courseId;
   String title;
   int durationMin;
   String content;
-  bool completed;
 
   Lesson({
     required this.id,
@@ -61,7 +82,6 @@ class Lesson {
     required this.title,
     required this.durationMin,
     this.content = '',
-    this.completed = false,
   });
 
   Map<String, dynamic> toMap() => {
@@ -70,7 +90,6 @@ class Lesson {
     'title': title,
     'durationMin': durationMin,
     'content': content,
-    'completed': completed ? 1 : 0,
   };
 
   factory Lesson.fromMap(Map m) => Lesson(
@@ -79,14 +98,14 @@ class Lesson {
     title: m['title'] ?? '',
     durationMin: m['durationMin'] ?? 0,
     content: m['content'] ?? '',
-    completed: (m['completed'] ?? 0) == 1,
   );
 }
 
-/// ملاحظة الطالب
+/// ملاحظة الطالب (خاصة بصاحبها)
 class Note {
   String id;
   String courseId;
+  String studentEmail;
   String title;
   String body;
   DateTime date;
@@ -97,11 +116,13 @@ class Note {
     required this.title,
     required this.body,
     required this.date,
+    this.studentEmail = '',
   });
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'courseId': courseId,
+    'studentEmail': studentEmail,
     'title': title,
     'body': body,
     'date': date.toIso8601String(),
@@ -110,6 +131,7 @@ class Note {
   factory Note.fromMap(Map m) => Note(
     id: m['id'],
     courseId: m['courseId'],
+    studentEmail: m['studentEmail'] ?? '',
     title: m['title'] ?? '',
     body: m['body'] ?? '',
     date: DateTime.parse(m['date']),

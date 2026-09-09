@@ -1,5 +1,9 @@
 // ============================================================
 // EduAcademy - قاعدة البيانات المحلية (SQLite) + عمليات CRUD
+//
+// الجداول: users, courses, lessons, notes, questions, results, progress
+// - progress: إكمال الدروس لكل طالب على حدة (studentEmail + lessonId)
+// - notes: خاصة بصاحبها (studentEmail)
 // ============================================================
 
 import 'package:flutter/foundation.dart';
@@ -14,11 +18,21 @@ class StorageService extends ChangeNotifier {
 
   late Database _db;
 
+  List<AppUser> _users = [];
   List<Course> _courses = [];
   List<Lesson> _lessons = [];
   List<Note> _notes = [];
   List<Question> _questions = [];
   List<QuizResult> _results = [];
+
+  /// (studentEmail, lessonId) للدروس المكتملة
+  final Set<String> _progress = {};
+  static String _pKey(String email, String lessonId) => '$email|$lessonId';
+
+  /// المستخدم الحالي (يُضبط عند الدخول ويُستخدم لتصفية البيانات الخاصة)
+  String currentEmail = '';
+  String currentName = '';
+  bool isTeacher = false;
 
   /// مسار مخصص لقاعدة البيانات (يُستخدم في الاختبارات فقط)
   String? overridePath;
@@ -28,7 +42,7 @@ class StorageService extends ChangeNotifier {
     final path = overridePath ?? '${await getDatabasesPath()}/eduacademy.db';
     _db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, v) async {
         await db.execute(
           'CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, role INTEGER)',
@@ -37,10 +51,10 @@ class StorageService extends ChangeNotifier {
           'CREATE TABLE courses(id TEXT PRIMARY KEY, title TEXT, instructor TEXT, category TEXT, description TEXT, color INTEGER)',
         );
         await db.execute(
-          'CREATE TABLE lessons(id TEXT PRIMARY KEY, courseId TEXT, title TEXT, durationMin INTEGER, content TEXT, completed INTEGER)',
+          'CREATE TABLE lessons(id TEXT PRIMARY KEY, courseId TEXT, title TEXT, durationMin INTEGER, content TEXT)',
         );
         await db.execute(
-          'CREATE TABLE notes(id TEXT PRIMARY KEY, courseId TEXT, title TEXT, body TEXT, date TEXT)',
+          'CREATE TABLE notes(id TEXT PRIMARY KEY, courseId TEXT, studentEmail TEXT, title TEXT, body TEXT, date TEXT)',
         );
         await db.execute(
           'CREATE TABLE questions(id TEXT PRIMARY KEY, courseId TEXT, text TEXT, options TEXT, correctIndex INTEGER)',
@@ -48,11 +62,24 @@ class StorageService extends ChangeNotifier {
         await db.execute(
           'CREATE TABLE results(id TEXT PRIMARY KEY, courseId TEXT, studentEmail TEXT, score INTEGER, total INTEGER, date TEXT)',
         );
+        await _createProgress(db);
         await _seed(db);
+      },
+      onUpgrade: (db, oldV, newV) async {
+        // الترقية من الإصدار 1: فصل التقدّم والملاحظات لكل طالب
+        if (oldV < 2) {
+          await _createProgress(db);
+          await db.execute('ALTER TABLE notes ADD COLUMN studentEmail TEXT');
+          await db.execute("UPDATE notes SET studentEmail = ''");
+        }
       },
     );
     await _reload();
   }
+
+  Future<void> _createProgress(Database db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS progress(studentEmail TEXT, lessonId TEXT, date TEXT, PRIMARY KEY(studentEmail, lessonId))',
+  );
 
   /// بيانات أولية حتى لا يبدأ التطبيق فارغاً
   Future<void> _seed(Database db) async {
@@ -196,6 +223,10 @@ class StorageService extends ChangeNotifier {
   }
 
   Future<void> _reload() async {
+    _users = (await _db.query(
+      'users',
+      columns: ['id', 'name', 'email', 'role'],
+    )).map((e) => AppUser.fromMap(e)).toList();
     _courses = (await _db.query(
       'courses',
     )).map((e) => Course.fromMap(e)).toList();
@@ -210,10 +241,27 @@ class StorageService extends ChangeNotifier {
     _results =
         (await _db.query('results')).map((e) => QuizResult.fromMap(e)).toList()
           ..sort((a, b) => b.date.compareTo(a.date));
+    _progress
+      ..clear()
+      ..addAll(
+        (await _db.query('progress')).map(
+          (e) => _pKey(e['studentEmail'] as String, e['lessonId'] as String),
+        ),
+      );
     notifyListeners();
   }
 
   String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+  // ================= الجلسة =================
+  void setSession(String email, String name, bool teacher) {
+    currentEmail = email;
+    currentName = name;
+    isTeacher = teacher;
+    notifyListeners();
+  }
+
+  void clearSession() => setSession('', '', false);
 
   // ================= المستخدمون =================
   Future<String?> register(
@@ -234,6 +282,7 @@ class StorageService extends ChangeNotifier {
       'password': PasswordHasher.hash(password),
       'role': role.index,
     });
+    await _reload();
     return null;
   }
 
@@ -264,11 +313,21 @@ class StorageService extends ChangeNotifier {
     );
   }
 
-  Future<int> get studentsCount async =>
-      Sqflite.firstIntValue(
-        await _db.rawQuery('SELECT COUNT(*) FROM users WHERE role = 0'),
-      ) ??
-      0;
+  /// كل الطلاب (للمعلم)
+  List<AppUser> get students =>
+      _users.where((u) => u.role == UserRole.student).toList();
+  AppUser? userByEmail(String email) =>
+      _users.where((u) => u.email == email.toLowerCase()).firstOrNull;
+
+  /// حذف حساب طالب مع كل بياناته (للمعلم)
+  Future<void> deleteStudent(String email) async {
+    final e = email.toLowerCase();
+    await _db.delete('users', where: 'email = ?', whereArgs: [e]);
+    await _db.delete('notes', where: 'studentEmail = ?', whereArgs: [e]);
+    await _db.delete('results', where: 'studentEmail = ?', whereArgs: [e]);
+    await _db.delete('progress', where: 'studentEmail = ?', whereArgs: [e]);
+    await _reload();
+  }
 
   // ================= الدورات (CRUD) =================
   List<Course> get courses => _courses;
@@ -287,10 +346,15 @@ class StorageService extends ChangeNotifier {
   }
 
   Future<void> deleteCourse(String id) async {
+    final lessonIds = lessonsOf(id).map((l) => l.id).toList();
     await _db.delete('courses', where: 'id = ?', whereArgs: [id]);
     await _db.delete('lessons', where: 'courseId = ?', whereArgs: [id]);
     await _db.delete('notes', where: 'courseId = ?', whereArgs: [id]);
     await _db.delete('questions', where: 'courseId = ?', whereArgs: [id]);
+    await _db.delete('results', where: 'courseId = ?', whereArgs: [id]);
+    for (final lid in lessonIds) {
+      await _db.delete('progress', where: 'lessonId = ?', whereArgs: [lid]);
+    }
     await _reload();
   }
 
@@ -298,12 +362,6 @@ class StorageService extends ChangeNotifier {
   List<Lesson> lessonsOf(String courseId) =>
       _lessons.where((l) => l.courseId == courseId).toList();
   List<Lesson> get lessons => _lessons;
-
-  double progressOf(String courseId) {
-    final l = lessonsOf(courseId);
-    if (l.isEmpty) return 0;
-    return l.where((x) => x.completed).length / l.length;
-  }
 
   Future<void> addLesson(Lesson l) async {
     l.id = l.id.isEmpty ? _newId() : l.id;
@@ -316,21 +374,55 @@ class StorageService extends ChangeNotifier {
     await _reload();
   }
 
-  Future<void> toggleLesson(Lesson l) async {
-    l.completed = !l.completed;
-    await updateLesson(l);
-  }
-
   Future<void> deleteLesson(String id) async {
     await _db.delete('lessons', where: 'id = ?', whereArgs: [id]);
+    await _db.delete('progress', where: 'lessonId = ?', whereArgs: [id]);
+    await _reload();
+  }
+
+  // ================= التقدّم (لكل طالب) =================
+  bool isCompleted(String lessonId, [String? email]) =>
+      _progress.contains(_pKey(email ?? currentEmail, lessonId));
+
+  int completedCount([String? email]) {
+    final e = email ?? currentEmail;
+    return _lessons.where((l) => isCompleted(l.id, e)).length;
+  }
+
+  double progressOf(String courseId, [String? email]) {
+    final l = lessonsOf(courseId);
+    if (l.isEmpty) return 0;
+    final e = email ?? currentEmail;
+    return l.where((x) => isCompleted(x.id, e)).length / l.length;
+  }
+
+  Future<void> toggleLesson(Lesson l, [String? email]) async {
+    final e = email ?? currentEmail;
+    if (isCompleted(l.id, e)) {
+      await _db.delete(
+        'progress',
+        where: 'studentEmail = ? AND lessonId = ?',
+        whereArgs: [e, l.id],
+      );
+    } else {
+      await _db.insert('progress', {
+        'studentEmail': e,
+        'lessonId': l.id,
+        'date': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
     await _reload();
   }
 
   // ================= الملاحظات (CRUD) =================
   List<Note> get notes => _notes;
+  List<Note> notesOf(String email) =>
+      _notes.where((n) => n.studentEmail == email).toList();
+  List<Note> get myNotes => notesOf(currentEmail);
 
   Future<void> addNote(Note n) async {
     n.id = n.id.isEmpty ? _newId() : n.id;
+    if (n.studentEmail.isEmpty) n.studentEmail = currentEmail;
     await _db.insert('notes', n.toMap());
     await _reload();
   }
@@ -345,13 +437,24 @@ class StorageService extends ChangeNotifier {
     await _reload();
   }
 
-  // ================= الاختبارات =================
+  // ================= الأسئلة (CRUD) =================
+  List<Question> get questions => _questions;
   List<Question> questionsOf(String courseId) =>
       _questions.where((q) => q.courseId == courseId).toList();
 
   Future<void> addQuestion(Question q) async {
     q.id = q.id.isEmpty ? _newId() : q.id;
     await _db.insert('questions', q.toMap());
+    await _reload();
+  }
+
+  Future<void> updateQuestion(Question q) async {
+    await _db.update(
+      'questions',
+      q.toMap(),
+      where: 'id = ?',
+      whereArgs: [q.id],
+    );
     await _reload();
   }
 
@@ -385,4 +488,12 @@ class StorageService extends ChangeNotifier {
       ? 0
       : _results.map((r) => r.percent).reduce((a, b) => a + b) /
             _results.length;
+
+  /// متوسط درجات طالب معيّن
+  double avgOf(String email) {
+    final r = resultsOf(email);
+    return r.isEmpty
+        ? 0
+        : r.map((x) => x.percent).reduce((a, b) => a + b) / r.length;
+  }
 }

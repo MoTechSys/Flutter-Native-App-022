@@ -113,7 +113,8 @@ class _CourseTile extends StatelessWidget {
     final s = StorageService.instance;
     final color = Color(course.color);
     final count = s.lessonsOf(course.id).length;
-    final progress = s.progressOf(course.id);
+    final qCount = s.questionsOf(course.id).length;
+    final progress = teacher ? 0.0 : s.progressOf(course.id);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -197,7 +198,9 @@ class _CourseTile extends StatelessWidget {
                     ),
                     const Spacer(),
                     Text(
-                      '$count درس',
+                      teacher ? '$count درس • $qCount سؤال' : '$count درس',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textDim,
                         fontSize: 11,
@@ -207,10 +210,10 @@ class _CourseTile extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
-                        value: progress,
+                        value: teacher ? 1 : progress,
                         minHeight: 5,
                         backgroundColor: AppColors.cardLight,
-                        color: color,
+                        color: teacher ? color.withValues(alpha: 0.35) : color,
                       ),
                     ),
                   ],

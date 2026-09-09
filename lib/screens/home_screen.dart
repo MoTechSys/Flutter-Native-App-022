@@ -14,6 +14,7 @@ import 'course_details_screen.dart';
 import 'courses_screen.dart';
 import 'notes_screen.dart';
 import 'stats_screen.dart';
+import 'students_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -88,7 +89,9 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, _) {
             final courses = s.courses;
             final certs = s.certificatesOf(_email);
-            final completed = s.lessons.where((l) => l.completed).length;
+            final completed = s.completedCount(_email);
+            final students = s.students.length;
+            final attempts = s.results.length;
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -157,27 +160,93 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisSpacing: 10,
                   crossAxisSpacing: 10,
                   childAspectRatio: 0.95,
-                  children: [
-                    StatTile(
-                      icon: Icons.menu_book,
-                      color: AppColors.primary,
-                      value: '${courses.length}',
-                      label: 'دورة',
-                    ),
-                    StatTile(
-                      icon: Icons.check_circle,
-                      color: AppColors.secondary,
-                      value: '$completed',
-                      label: 'درس مكتمل',
-                    ),
-                    StatTile(
-                      icon: Icons.workspace_premium,
-                      color: AppColors.orange,
-                      value: '${certs.length}',
-                      label: 'شهادة',
-                    ),
-                  ],
+                  children: _teacher
+                      ? [
+                          StatTile(
+                            icon: Icons.menu_book,
+                            color: AppColors.primary,
+                            value: '${courses.length}',
+                            label: 'دورة',
+                          ),
+                          StatTile(
+                            icon: Icons.people,
+                            color: AppColors.secondary,
+                            value: '$students',
+                            label: 'طالب',
+                          ),
+                          StatTile(
+                            icon: Icons.quiz,
+                            color: AppColors.orange,
+                            value: '$attempts',
+                            label: 'محاولة اختبار',
+                          ),
+                        ]
+                      : [
+                          StatTile(
+                            icon: Icons.menu_book,
+                            color: AppColors.primary,
+                            value: '${courses.length}',
+                            label: 'دورة',
+                          ),
+                          StatTile(
+                            icon: Icons.check_circle,
+                            color: AppColors.secondary,
+                            value: '$completed',
+                            label: 'درس مكتمل',
+                          ),
+                          StatTile(
+                            icon: Icons.workspace_premium,
+                            color: AppColors.orange,
+                            value: '${certs.length}',
+                            label: 'شهادة',
+                          ),
+                        ],
                 ),
+                if (_teacher) ...[
+                  const SizedBox(height: 12),
+                  // اختصارات المعلم
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _QuickAction(
+                          icon: Icons.people_outline,
+                          label: 'الطلاب',
+                          color: AppColors.secondary,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const StudentsScreen(),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _QuickAction(
+                          icon: Icons.add_box_outlined,
+                          label: 'دورة جديدة',
+                          color: AppColors.primary,
+                          onTap: () => showCourseForm(context),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _QuickAction(
+                          icon: Icons.bar_chart,
+                          label: 'الإحصائيات',
+                          color: AppColors.orange,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  StatsScreen(email: _email, teacher: true),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -291,16 +360,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: const Text('الدورات والدروس'),
                     onTap: () => _go(const CoursesScreen()),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.sticky_note_2_outlined),
-                    title: const Text('ملاحظاتي'),
-                    onTap: () => _go(const NotesScreen()),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.workspace_premium_outlined),
-                    title: const Text('الشهادات'),
-                    onTap: () => _go(CertificatesScreen(email: _email)),
-                  ),
+                  if (_teacher)
+                    ListTile(
+                      leading: const Icon(Icons.people_outline),
+                      title: const Text('الطلاب'),
+                      onTap: () => _go(const StudentsScreen()),
+                    )
+                  else ...[
+                    ListTile(
+                      leading: const Icon(Icons.sticky_note_2_outlined),
+                      title: const Text('ملاحظاتي'),
+                      onTap: () => _go(const NotesScreen()),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.workspace_premium_outlined),
+                      title: const Text('شهاداتي'),
+                      onTap: () => _go(CertificatesScreen(email: _email)),
+                    ),
+                  ],
                   ListTile(
                     leading: const Icon(Icons.bar_chart_outlined),
                     title: Text(
@@ -338,6 +415,49 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+/// زر اختصار في لوحة المعلم
+class _QuickAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: color.withValues(alpha: 0.1),
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// بطاقة دورة في الرئيسية
 class _CourseCard extends StatelessWidget {
   final Course course;
@@ -347,8 +467,10 @@ class _CourseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = StorageService.instance;
     final color = Color(course.color);
-    final progress = s.progressOf(course.id);
+    final teacher = s.isTeacher;
+    final progress = teacher ? 0.0 : s.progressOf(course.id);
     final count = s.lessonsOf(course.id).length;
+    final qCount = s.questionsOf(course.id).length;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Card(
@@ -385,7 +507,9 @@ class _CourseCard extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        '${course.instructor} • $count درس',
+                        teacher
+                            ? '${course.instructor} • $count درس • $qCount سؤال'
+                            : '${course.instructor} • $count درس',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -393,24 +517,29 @@ class _CourseCard extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 6,
-                          backgroundColor: AppColors.cardLight,
-                          color: color,
+                      if (!teacher) ...[
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 6,
+                            backgroundColor: AppColors.cardLight,
+                            color: color,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  '${(progress * 100).round()}%',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: color),
-                ),
+                if (teacher)
+                  const Icon(Icons.chevron_left, color: AppColors.textDim)
+                else
+                  Text(
+                    '${(progress * 100).round()}%',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                  ),
               ],
             ),
           ),
