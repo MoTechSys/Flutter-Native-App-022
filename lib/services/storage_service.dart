@@ -4,6 +4,7 @@
 // الجداول: users, courses, lessons, notes, questions, results, progress
 // - progress: إكمال الدروس لكل طالب على حدة (studentEmail + lessonId)
 // - notes: خاصة بصاحبها (studentEmail)
+// - users.verified (v3): 1 = تم تأكيد البريد برمز OTP، 0 = بانتظار التفعيل
 // ============================================================
 
 import 'package:flutter/foundation.dart';
@@ -42,10 +43,10 @@ class StorageService extends ChangeNotifier {
     final path = overridePath ?? '${await getDatabasesPath()}/eduacademy.db';
     _db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, v) async {
         await db.execute(
-          'CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, role INTEGER)',
+          'CREATE TABLE users(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, password TEXT, role INTEGER, verified INTEGER NOT NULL DEFAULT 0)',
         );
         await db.execute(
           'CREATE TABLE courses(id TEXT PRIMARY KEY, title TEXT, instructor TEXT, category TEXT, description TEXT, color INTEGER)',
@@ -71,6 +72,14 @@ class StorageService extends ChangeNotifier {
           await _createProgress(db);
           await db.execute('ALTER TABLE notes ADD COLUMN studentEmail TEXT');
           await db.execute("UPDATE notes SET studentEmail = ''");
+        }
+        // الترقية إلى 3: تأكيد البريد. الحسابات القديمة تُعدّ مؤكدة
+        // حتى لا يُقفل أي مستخدم حالي بعد التحديث.
+        if (oldV < 3) {
+          await db.execute(
+            'ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute('UPDATE users SET verified = 1');
         }
       },
     );
@@ -225,7 +234,7 @@ class StorageService extends ChangeNotifier {
   Future<void> _reload() async {
     _users = (await _db.query(
       'users',
-      columns: ['id', 'name', 'email', 'role'],
+      columns: ['id', 'name', 'email', 'role', 'verified'],
     )).map((e) => AppUser.fromMap(e)).toList();
     _courses = (await _db.query(
       'courses',
@@ -264,33 +273,76 @@ class StorageService extends ChangeNotifier {
   void clearSession() => setSession('', '', false);
 
   // ================= المستخدمون =================
+  /// إنشاء حساب. يُنشأ غير مؤكد (verified=0) حتى يُدخل المستخدم رمز
+  /// التحقق المرسل إلى بريده. إذا كان البريد مسجّلاً لكن غير مؤكد،
+  /// يُستبدل الحساب القديم بالبيانات الجديدة (حتى لا يُحجز البريد إلى الأبد
+  /// بسبب تسجيل لم يُكمل).
   Future<String?> register(
     String name,
     String email,
     String password, {
     UserRole role = UserRole.student,
+    bool verified = false,
   }) async {
-    final exists = await _db.query(
-      'users',
-      where: 'email = ?',
-      whereArgs: [email.toLowerCase()],
-    );
-    if (exists.isNotEmpty) return 'البريد الإلكتروني مسجّل مسبقاً';
+    final e = email.trim().toLowerCase();
+    final exists = await _db.query('users', where: 'email = ?', whereArgs: [e]);
+    if (exists.isNotEmpty) {
+      if ((exists.first['verified'] ?? 1) == 1) {
+        return 'البريد الإلكتروني مسجّل مسبقاً';
+      }
+      await _db.delete('users', where: 'email = ?', whereArgs: [e]);
+    }
     await _db.insert('users', {
-      'name': name,
-      'email': email.toLowerCase(),
+      'name': name.trim(),
+      'email': e,
       'password': PasswordHasher.hash(password),
       'role': role.index,
+      'verified': verified ? 1 : 0,
     });
     await _reload();
     return null;
   }
 
+  /// تأكيد البريد بعد نجاح رمز التحقق
+  Future<void> markVerified(String email) async {
+    await _db.update(
+      'users',
+      {'verified': 1},
+      where: 'email = ?',
+      whereArgs: [email.trim().toLowerCase()],
+    );
+    await _reload();
+  }
+
+  /// هل البريد مسجّل ومؤكد؟ (null = غير موجود)
+  Future<bool?> isVerified(String email) async {
+    final rows = await _db.query(
+      'users',
+      columns: ['verified'],
+      where: 'email = ?',
+      whereArgs: [email.trim().toLowerCase()],
+    );
+    if (rows.isEmpty) return null;
+    return (rows.first['verified'] ?? 1) == 1;
+  }
+
+  /// حذف حساب لم يُكمل تفعيله (عند إلغاء التسجيل)
+  Future<void> deleteUnverified(String email) async {
+    await _db.delete(
+      'users',
+      where: 'email = ? AND verified = 0',
+      whereArgs: [email.trim().toLowerCase()],
+    );
+    await _reload();
+  }
+
+  /// تسجيل الدخول. يعيد الصف عند صحة البيانات (حتى لو لم يُؤكد البريد —
+  /// شاشة الدخول تفحص `verified` وتوجّه إلى التفعيل عند الحاجة)
   Future<Map<String, dynamic>?> login(String email, String password) async {
     final rows = await _db.query(
       'users',
       where: 'email = ?',
-      whereArgs: [email.toLowerCase()],
+      whereArgs: [email.trim().toLowerCase()],
     );
     if (rows.isEmpty) return null;
     return PasswordHasher.verify(password, rows.first['password'] as String)
@@ -301,7 +353,7 @@ class StorageService extends ChangeNotifier {
   Future<bool> emailExists(String email) async => (await _db.query(
     'users',
     where: 'email = ?',
-    whereArgs: [email.toLowerCase()],
+    whereArgs: [email.trim().toLowerCase()],
   )).isNotEmpty;
 
   Future<void> resetPassword(String email, String newPassword) async {
@@ -309,13 +361,13 @@ class StorageService extends ChangeNotifier {
       'users',
       {'password': PasswordHasher.hash(newPassword)},
       where: 'email = ?',
-      whereArgs: [email.toLowerCase()],
+      whereArgs: [email.trim().toLowerCase()],
     );
   }
 
-  /// كل الطلاب (للمعلم)
+  /// كل الطلاب المؤكدين (للمعلم) — الحسابات غير المفعّلة لا تظهر
   List<AppUser> get students =>
-      _users.where((u) => u.role == UserRole.student).toList();
+      _users.where((u) => u.role == UserRole.student && u.verified).toList();
   AppUser? userByEmail(String email) =>
       _users.where((u) => u.email == email.toLowerCase()).firstOrNull;
 

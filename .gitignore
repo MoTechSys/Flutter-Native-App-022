@@ -10,3 +10,6 @@ android/local.properties
 android/key.properties
 android/release-key.jks
 *.log
+# بيانات SMTP الحقيقية (مثل مفتاح التوقيع: لا تُرفع على GitHub)
+lib/config/mail_secrets.dart
+android/smtp.properties

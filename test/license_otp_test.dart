@@ -9,6 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:eduacademy/screens/auth/forgot_password_screen.dart';
+import 'package:eduacademy/services/email/email_service.dart';
+
+import 'fake_email_sender.dart';
 import 'package:eduacademy/services/license_service.dart';
 import 'package:eduacademy/services/storage_service.dart';
 import 'package:eduacademy/theme.dart';
@@ -109,7 +112,7 @@ void main() {
     });
   });
 
-  group('forgot password OTP flow', () {
+  group('forgot password OTP flow (email OTP, in-app fallback)', () {
     final s = StorageService.instance;
     setUpAll(() async {
       SharedPreferences.setMockInitialValues({});
@@ -117,7 +120,9 @@ void main() {
       databaseFactory = databaseFactoryFfi;
       s.overridePath = inMemoryDatabasePath;
       await s.init();
-      await s.register('طالب', 'otp@y.com', 'old123');
+      await s.register('طالب', 'otp@y.com', 'old123', verified: true);
+      // في الاختبارات لا يوجد SMTP => يُعرض الرمز داخل التطبيق مع زر نسخ
+      EmailService.sender = FakeSender(supported: false);
     });
 
     testWidgets('email -> OTP -> verify -> new password', (t) async {
@@ -130,6 +135,9 @@ void main() {
             if (call.method == 'Clipboard.setData') {
               clipboard = (call.arguments as Map)['text'] as String;
             }
+            if (call.method == 'Clipboard.getData') {
+              return {'text': clipboard};
+            }
             return null;
           });
 
@@ -139,20 +147,23 @@ void main() {
       // 1) بريد غير مسجّل -> رسالة خطأ ويبقى في الخطوة 1
       await t.enterText(find.byType(TextFormField), 'none@y.com');
       await t.runAsync(() async {
-        await t.tap(find.text('إنشاء رمز التحقق'));
+        await t.tap(find.text('إرسال رمز التحقق'));
         await Future<void>.delayed(const Duration(milliseconds: 300));
       });
       await t.pump();
       expect(find.text('لا يوجد حساب بهذا البريد الإلكتروني'), findsOneWidget);
 
-      // 2) بريد صحيح -> خطوة OTP
+      // 2) بريد صحيح -> خطوة OTP (الرمز يُصدر ويُعرض لعدم توفر SMTP)
       await t.enterText(find.byType(TextFormField), 'otp@y.com');
       await t.runAsync(() async {
-        await t.tap(find.text('إنشاء رمز التحقق'));
-        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await t.tap(find.text('إرسال رمز التحقق'));
+        await Future<void>.delayed(const Duration(milliseconds: 500));
       });
-      await t.pumpAndSettle();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
       expect(find.text('رمز التحقق (OTP)'), findsOneWidget);
+      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.textContaining('صالح لمدة'), findsOneWidget);
 
       // نسخ الرمز
       await t.tap(find.byIcon(Icons.copy));
@@ -160,20 +171,24 @@ void main() {
       expect(clipboard, isNotNull);
       expect(clipboard!.length, 6);
 
-      // 3) رمز خاطئ -> خطأ
-      await t.enterText(find.byType(TextFormField), '000000');
-      await t.ensureVisible(find.text('تحقق من الرمز'));
-      await t.tap(find.text('تحقق من الرمز'));
+      // 3) رمز خاطئ -> رسالة فشل ويبقى في الخطوة 2
+      final otpField = find.byType(TextFormField);
+      await t.runAsync(() async {
+        await t.enterText(otpField, '000000'); // يتحقق تلقائياً عند 6 أرقام
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
       await t.pump();
-      await t.pump(const Duration(milliseconds: 700));
+      await t.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('الرمز غير صحيح'), findsOneWidget);
-      await t.pumpAndSettle();
+      expect(find.text('رمز التحقق (OTP)'), findsOneWidget);
 
       // رمز صحيح (المنسوخ) -> خطوة كلمة المرور
-      await t.enterText(find.byType(TextFormField), clipboard!);
-      await t.ensureVisible(find.text('تحقق من الرمز'));
-      await t.tap(find.text('تحقق من الرمز'));
-      await t.pumpAndSettle();
+      await t.runAsync(() async {
+        await t.enterText(otpField, clipboard!);
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      });
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
       expect(find.text('كلمة مرور جديدة'), findsOneWidget);
 
       // 4) كلمة قصيرة/غير متطابقة -> validation
@@ -182,14 +197,14 @@ void main() {
       await t.enterText(fields.at(1), '123');
       await t.ensureVisible(find.text('حفظ كلمة المرور'));
       await t.tap(find.text('حفظ كلمة المرور'));
-      await t.pumpAndSettle();
+      await t.pump();
       expect(find.textContaining('6 أحرف'), findsWidgets);
 
       await t.enterText(fields.at(0), 'new123');
       await t.enterText(fields.at(1), 'new124');
       await t.ensureVisible(find.text('حفظ كلمة المرور'));
       await t.tap(find.text('حفظ كلمة المرور'));
-      await t.pumpAndSettle();
+      await t.pump();
       expect(find.text('كلمتا المرور غير متطابقتين'), findsOneWidget);
 
       // صحيح -> يُغيّر ويعود
@@ -199,7 +214,8 @@ void main() {
         await t.tap(find.text('حفظ كلمة المرور'));
         await Future<void>.delayed(const Duration(milliseconds: 400));
       });
-      await t.pumpAndSettle();
+      await t.pump();
+      await t.pump(const Duration(seconds: 3));
 
       // الدخول بالقديمة يفشل وبالجديدة ينجح
       await t.runAsync(() async {

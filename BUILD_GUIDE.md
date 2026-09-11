@@ -1,7 +1,7 @@
 # دليل البناء — EduAcademy
 
 > لأي شخص يحمّل المستودع ويريد **تشغيل التطبيق أو إنتاج ملف APK بنفسه** خطوة بخطوة.
-> آخر APK جاهز موجود في [`releases/EduAcademy-v1.2.0.apk`](releases/EduAcademy-v1.2.0.apk) — إن أردت التثبيت فقط بلا بناء، حمّله من هناك.
+> آخر APK جاهز موجود في [`releases/EduAcademy-v1.3.0.apk`](releases/EduAcademy-v1.3.0.apk) — إن أردت التثبيت فقط بلا بناء، حمّله من هناك.
 
 ---
 
@@ -9,13 +9,18 @@
 
 | المسار | الغرض |
 |---|---|
-| `releases/EduAcademy-v1.2.0.apk` | **آخر إصدار جاهز للتثبيت** (موقّع، android-arm64) |
-| `lib/` | كود التطبيق (25 ملف Dart) |
-| `test/` | 2 ملفات اختبار (`license_otp_test.dart`, `screens_test.dart`) |
+| `releases/EduAcademy-v1.3.0.apk` | **آخر إصدار جاهز للتثبيت** (موقّع، android-arm64) — والسابق `v1.2.0` |
+| `lib/` | كود التطبيق (34 ملف Dart) |
+| `lib/config/mail_config.dart` | إعداد SMTP (يقرأ `--dart-define`، لا يحوي أسراراً) |
+| `lib/services/email/`, `lib/services/otp_service.dart` | إرسال رموز التحقق بالبريد + محرك OTP (§7) |
+| `tool/build_release.sh` | سكربت بناء APK يمرّر بيانات SMTP من `android/smtp.properties` |
+| `android/smtp.properties.example` | نموذج إعداد SMTP (انسخه إلى `smtp.properties`) |
+| `test/` | 5 ملفات اختبار — 38 اختباراً (`license_otp_test`, `otp_email_test`, `db_upgrade_test`, `screens_test`, `fake_email_sender`) |
 | `assets/` | الصور والأصول |
 | `android/` | مشروع أندرويد (الحزمة `com.eduacademy.app`) |
 | `web/` | ملفات الويب (تشمل `sqlite3.wasm` و`sqflite_sw.js` لعمل SQLite في المتصفح) |
 | `license.json` | **ملف التحكم عن بُعد** — يقرأه التطبيق عند كل تشغيل (§6) |
+| `docs/CHANGELOG_v1.3.0.md` | **التوثيق الفني لإصدار 1.3.0** (OTP عبر البريد، تفعيل الحساب، DB v3، إصلاح الكيبورد) |
 | `docs/CHANGELOG_v1.2.0.md` | التوثيق الفني المفصّل لإصدار 1.2.0 (الترخيص، الأيقونة، OTP) |
 | `docs/make_icons.py` | سكربت توليد أيقونة الإطلاق |
 | `docs/SESSION_LOG.md` | سجل التطوير: القرارات والمشاكل وحلولها |
@@ -70,10 +75,17 @@ storeFile=../release-key.jks
 > **لتثبيت تحديث فوق نسخة مثبّتة يجب نفس المفتاح**، وإلا يطلب أندرويد حذف التطبيق أولاً.
 
 ```bash
-flutter build apk --release --target-platform android-arm64
+# الطريقة الموصى بها (تمرّر بيانات SMTP تلقائياً من android/smtp.properties — §7):
+./tool/build_release.sh
+
+# أو يدوياً:
+flutter build apk --release --target-platform android-arm64 \
+  --dart-define=SMTP_USER=you@gmail.com --dart-define=SMTP_PASS=xxxxxxxxxxxxxxxx
 # → build/app/outputs/flutter-apk/app-release.apk
 ```
 كل المعالجات: `flutter build apk --release` · ملف لكل معمارية: `--split-per-abi`
+
+> بدون `--dart-define=SMTP_*` يُبنى التطبيق ويعمل كاملاً، لكن رمز التحقق يُعرض داخل التطبيق بدل إرساله بالبريد.
 
 ### 3.ب — بلا مفتاح؟ أنشئ واحداً
 ```bash
@@ -117,6 +129,9 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 | `INSTALL_FAILED_VERSION_DOWNGRADE` | versionCode لم يزد | ارفع الرقم بعد `+` |
 | شاشة "الترخيص موقوف نهائياً" | `license.json` غير موجود على GitHub (404) | أعِد الملف إلى جذر `main` |
 | شاشة بيضاء على الويب | ملفات `web/sqlite3.wasm` / `sqflite_sw.js` مفقودة | لا تحذفها |
+| رمز التحقق يُعرض داخل التطبيق بدل البريد | البناء بلا `SMTP_USER/PASS`، أو نسخة ويب | ابنِ عبر `tool/build_release.sh` مع `android/smtp.properties` (§7) |
+| "رُفض الدخول إلى خادم البريد" | كلمة مرور الحساب العادية بدل App Password | أنشئ App Password من Google (تحقق بخطوتين مفعّل) |
+| الرسالة لا تصل | مجلد Spam / حد إرسال Gmail (~500/يوم) | تحقق من Spam؛ استخدم "إعادة الإرسال" بعد 30 ث |
 
 ---
 
@@ -136,3 +151,35 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 | بلا إنترنت | — | آخر حالة محفوظة |
 
 التعديل يصل خلال ثوانٍ. الشيفرة في `lib/services/license_service.dart` ومغطّاة بالاختبارات.
+
+---
+
+## 7. رموز التحقق عبر البريد (SMTP) — جديد في 1.3.0
+
+يرسل التطبيق رمز تحقق (6 أرقام، صالح 10 دقائق) إلى بريد المستخدم عند **إنشاء الحساب** وعند **نسيت كلمة المرور**. الإرسال يتم مباشرة من الجهاز عبر SMTP (حزمة `mailer`) بلا أي خادم وسيط.
+
+### 7.أ — الإعداد (مرة واحدة)
+1. حساب Gmail مخصّص للإرسال، مع **التحقق بخطوتين** مفعّلاً.
+2. أنشئ **App password** (16 حرفاً) من https://myaccount.google.com/apppasswords
+3. ```bash
+   cp android/smtp.properties.example android/smtp.properties
+   # املأ SMTP_USER و SMTP_PASS (المسافات في كلمة المرور لا تهم)
+   ```
+   الملف **مُتجاهَل في `.gitignore`** — لا يُرفع أبداً (المستودع عام).
+4. `./tool/build_release.sh` → يقرأ الملف ويمرّره كـ `--dart-define` ويضع الناتج في `releases/`.
+
+### 7.ب — كيف يتصرف التطبيق
+
+| الحالة | السلوك |
+|---|---|
+| Android + SMTP مضبوط | يُرسل البريد؛ الشاشة تعرض "أرسلنا الرمز إلى بريدك" وعدّاداً 10:00 |
+| فشل الإرسال (لا نت / رفض) | يعرض سبب الفشل **ويعرض الرمز داخل التطبيق مع زر نسخ** حتى لا يتعطل المستخدم |
+| ويب (`flutter run -d chrome`) | المتصفح لا يدعم SMTP → الرمز يُعرض داخل التطبيق دائماً |
+| بناء بلا `SMTP_*` | كذلك الرمز داخل التطبيق |
+| `--dart-define=OTP_SHOW_IN_APP=true` | يُرسل البريد **ويعرض** الرمز أيضاً (مفيد للعرض أمام الأستاذ) |
+
+### 7.ج — قواعد الرمز (OtpService)
+6 أرقام · `Random.secure()` · صالح **10 دقائق** · 5 محاولات ثم يُلغى · إعادة إرسال بعد 30 ث · يُحفظ **مجزّأً** (SHA-256+salt) لا نصاً · مرة واحدة · مرتبط بالبريد والغرض (تسجيل/استعادة) · يبقى صالحاً بعد الخروج من التطبيق والرجوع.
+
+### 7.د — تغيير حساب الإرسال لاحقاً
+عدّل `android/smtp.properties` وأعد البناء. لا حاجة لتغيير أي كود. لاستخدام خادم غير Gmail: غيّر `SMTP_HOST`/`SMTP_PORT` (587 STARTTLS أو 465 SSL).

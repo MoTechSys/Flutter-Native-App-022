@@ -92,7 +92,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 child: const Padding(
                   padding: EdgeInsets.all(8),
                   child: Text(
-                    'الإصدار 1.2.0',
+                    'الإصدار 1.3.0',
                     style: TextStyle(color: AppColors.textDim),
                   ),
                 ),

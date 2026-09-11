@@ -53,14 +53,18 @@ void main() {
     s.overridePath = inMemoryDatabasePath;
     await s.init();
     s.setSession('x@y.com', 'معتصم', false);
-    // حسابات: طالب + معلم (الدور يُحفظ فعلاً)
-    expect(await s.register('معتصم', 'x@y.com', '123456'), isNull);
+    // حسابات: طالب + معلم (الدور يُحفظ فعلاً) — مفعّلة البريد (v1.3.0)
+    expect(
+      await s.register('معتصم', 'x@y.com', '123456', verified: true),
+      isNull,
+    );
     expect(
       await s.register(
         'المعلم أحمد',
         't@y.com',
         '123456',
         role: UserRole.teacher,
+        verified: true,
       ),
       isNull,
     );

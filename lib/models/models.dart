@@ -53,11 +53,15 @@ class AppUser {
   String email;
   UserRole role;
 
+  /// هل تم تأكيد البريد برمز التحقق (v1.3.0)
+  bool verified;
+
   AppUser({
     required this.id,
     required this.name,
     required this.email,
     required this.role,
+    this.verified = true,
   });
 
   factory AppUser.fromMap(Map m) => AppUser(
@@ -65,6 +69,7 @@ class AppUser {
     name: m['name'] ?? '',
     email: m['email'] ?? '',
     role: (m['role'] ?? 0) == 1 ? UserRole.teacher : UserRole.student,
+    verified: (m['verified'] ?? 1) == 1,
   );
 }
 

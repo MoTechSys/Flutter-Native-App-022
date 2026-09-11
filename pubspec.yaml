@@ -1,7 +1,7 @@
 name: eduacademy
 description: "EduAcademy - تطبيق أكاديمي وإدارة دورات تعليمية"
 publish_to: 'none'
-version: 1.2.0+5
+version: 1.3.0+6
 
 environment:
   sdk: ^3.9.2
@@ -18,6 +18,8 @@ dependencies:
   crypto: ^3.0.3
   share_plus: ^10.1.4
   path_provider: ^2.1.5
+  # إرسال رمز التحقق (OTP) عبر SMTP - Android فقط (على الويب يُعرض الرمز داخل التطبيق)
+  mailer: ^7.2.0
 
   intl: any
 
