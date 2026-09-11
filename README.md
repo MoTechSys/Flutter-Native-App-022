@@ -4,7 +4,9 @@
 
 **الحزمة:** `com.eduacademy.app` · **الإصدار الحالي:** 1.3.0 (build 6) · Flutter 3.35.4
 
-**📱 آخر APK جاهز للتثبيت:** [`releases/EduAcademy-v1.3.0.apk`](releases/EduAcademy-v1.3.0.apk) (السابق: [`v1.2.0`](releases/EduAcademy-v1.2.0.apk))
+**📱 تحميل مباشر (GitHub Release):** https://github.com/MoTechSys/Flutter-Native-App-022/releases/download/v1.3.0/EduAcademy-v1.3.0.apk
+**📦 صفحة الإصدار:** https://github.com/MoTechSys/Flutter-Native-App-022/releases/tag/v1.3.0
+**📁 نسخة داخل المستودع:** [`releases/EduAcademy-v1.3.0.apk`](releases/EduAcademy-v1.3.0.apk) (السابق: [`v1.2.0`](releases/EduAcademy-v1.2.0.apk))
 > ⚠️ نسخة 1.3.0 المرفوعة موقّعة بمفتاح **مؤقت** (المفتاح الأصلي غير متوفر في بيئة البناء). للتحديث فوق 1.2.0 بلا حذف أعد البناء بالمفتاح الأصلي — راجع [`docs/CHANGELOG_v1.3.0.md` §10](docs/CHANGELOG_v1.3.0.md).
 **🛠 كيف تبني APK بنفسك:** [`BUILD_GUIDE.md`](BUILD_GUIDE.md)
 **📓 سجل التطوير والقرارات:** [`docs/SESSION_LOG.md`](docs/SESSION_LOG.md)
